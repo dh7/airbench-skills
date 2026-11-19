@@ -103,6 +103,28 @@ not scored. The vision challenges need a vision-capable model; a text-only model
 simply fails those three — that is fine, as long as every compared config is the
 same model family.
 
+**A harness that stops early voids the run.** If the harness exits before every
+challenge is answered (a permission refusal, a crash, a context overflow), the
+score waits for the hour to run out: the pass count is short and `wallTimeMs` is
+just the clock. That measures the harness, not the server. Check the harness log;
+if it stopped early, mark the run failed
+(`POST /api/checkups/{checkupId}/fail` with `{ "reason": "…" }`, same key), fix the
+harness, and rerun. Common causes, seen in practice:
+
+- opencode refuses paths outside its working directory (`external_directory …
+  auto-rejecting`), the model reaches for `/tmp` on the code challenges, and
+  `opencode run` then just ends. Allow `/tmp` and nothing else in `opencode.json`:
+  `"permission": { "external_directory": { "*": "deny", "/tmp/*": "allow", "/tmp/**": "allow" } }`.
+  Setting `TMPDIR` is not enough; the model writes `/tmp` paths itself.
+- Vision images and code projects fill the context. At 64K a 27B model compacted
+  8 times in one quick test and lost track of the answer format. Use ≥128K if the
+  server allows it, the same for every compared config.
+- `opencode run` exits as soon as the model ends a turn without a tool call, even
+  with challenges left. A small wrapper that checks each run's `pending_keys`
+  (`GET /api/runs/{runId}` with that run's token, both in the briefing) and resumes
+  the session (`opencode run -c "N challenges are still unanswered…"`) keeps it
+  going. It's harness policy, not help: apply it identically to every config.
+
 ## 3. Read the score
 
 `scripts/airbench_quick.py score --out run/` (add `--wait` to poll every 30 s)
@@ -132,12 +154,22 @@ a day per key. So:
   speed and passed the long-context gates. Not on every experiment.
 - **Always for lossy trades** (quantization, int8/fp8 GEMMs, KV dtype, draft vocab
   pruning, sampling changes). A change proven greedy-equivalent needs it less.
-- **Accept** when `passed` is ≥ the baseline's, or one below it on a second run
-  that confirms (one challenge is within noise). **Reject** a drop of two or more,
-  or a drop that repeats. Write the verdict and the numbers in `PLAN.md`.
-- **Wall time is the real speed result.** A config that raises tok/s but makes the
-  agent take longer (more turns, longer reasoning, retries) did not get faster.
-  Report `wallTimeMs` next to tok/s; treat a regression over ~15% as a finding.
+- **Run each compared config at least twice**, alternating the order (ctl, cand,
+  cand, ctl). Run-to-run noise is several challenges, not one: in a measured run
+  the same config scored 9/15 and then 13/15.
+- **Reject** when the candidate's best run is below the control's worst run.
+  **Accept** when the ranges overlap and the candidate's mean is not lower; if the
+  ranges overlap with a lower mean, it's inconclusive: run each config once more.
+  Write the verdict and every run's numbers in `PLAN.md`.
+- **Wall time is the speed the user feels**, but only when the harness ran
+  cleanly. A config that raises tok/s but makes the agent take longer (more turns,
+  longer reasoning, retries) did not get faster. Compactions and resumes swing it
+  by 2× on their own, so read it across runs, never from one, and note how many
+  compactions and resumes each run had.
+
+Measured example (RTX 5090, Qwen3.8-27B NVFP4, vLLM 0.27.1, opencode 1.3.13, 128K):
+`--kv-cache-dtype fp8` vs `auto` gave the same decode (86.7 vs 86.9 tok/s) and
++3.5% KV tokens, and scored 9 and 13 against 14 and 15. Rejected.
 - Never mix harnesses or harness versions across compared runs; the harness is
   part of what is measured. Record it in `agent.meta`.
 
@@ -147,8 +179,8 @@ Add these rows to the results table:
 
 | Metric | Baseline | Now | How measured |
 |---|---:|---:|---|
-| airbench quick, passed | 12/15 | 12/15 | airbench.ai quick test, harness + version, N runs |
-| airbench quick, wall time | 12m 14s | 9m 02s | `wallTimeMs`, first call to last answer |
+| airbench quick, passed | 14, 15 /15 | 9, 13 /15 | airbench.ai quick test, harness + version, every run listed |
+| airbench quick, wall time | 28m, 52m | 26m, 40m | `wallTimeMs`, first call to last answer; compactions/resumes per run |
 
 Say plainly which runs were single runs.
 
