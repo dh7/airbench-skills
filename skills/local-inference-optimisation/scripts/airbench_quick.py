@@ -105,6 +105,10 @@ def cmd_start(a):
     if a.name:
         body.setdefault("agent", {})["name"] = a.name
     body["kind"] = "quick"
+    # One id for this run, on airbench (agent.meta) and in the ledger: stamp the
+    # harness and server logs with it, so a score drop leads to its own logs.
+    run_id = a.run_id or time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + os.urandom(2).hex()
+    body.setdefault("agent", {}).setdefault("meta", {})["runId"] = run_id
     s, r = call("POST", "/api/checkups", body, key=read_key())
     if s not in (200, 201):
         die(s, r)
@@ -113,6 +117,7 @@ def cmd_start(a):
         f.write(r["instructions"])
     agent_meta = (body.get("agent") or {}).get("meta") or {}
     meta = {
+        "runId": run_id,
         "checkupId": r["checkupId"],
         "agent": (body.get("agent") or {}).get("name"),
         "config": agent_meta.get("config"),
@@ -124,6 +129,7 @@ def cmd_start(a):
         json.dump(meta, f, indent=2)
     print(f"quick test started: checkup {r['checkupId']}. The clock is running (1 hour).")
     print(f"Hand {os.path.join(a.out, 'instructions.md')} verbatim to the harness running the LOCAL model.")
+    print(f"run id {run_id}: stamp the harness and server logs with it (e.g. export AIRBENCH_RUN_ID={run_id}).")
 
 
 def cmd_score(a):
@@ -138,7 +144,7 @@ def cmd_score(a):
         break
     if s != 200:
         die(s, r)
-    line = {"kind": "airbench_quick", **{k: meta.get(k) for k in ("checkupId", "agent", "config", "decoding")}, **r}
+    line = {"kind": "airbench_quick", **{k: meta.get(k) for k in ("runId", "checkupId", "agent", "config", "decoding")}, **r}
     with open(a.ledger, "a") as f:
         f.write(json.dumps(line) + "\n")
     print(f"passed {r['passed']}/{r['total']} in {r['wallTimeMs'] / 1000:.0f}s  (logged to {a.ledger})")
@@ -156,6 +162,7 @@ def main():
     s.add_argument("--setup", help="JSON file with agent / setup / agentConfig")
     s.add_argument("--name", help="agent name for this run (overrides the file)")
     s.add_argument("--out", required=True)
+    s.add_argument("--run-id", help="id for this run (default: UTC time + 4 hex)")
     s.set_defaults(fn=cmd_start)
     c = sub.add_parser("score")
     c.add_argument("--out", required=True)

@@ -85,6 +85,9 @@ and a body like:
   `min_p`, `seed` where the engine honours them). A quant change moves a
   distribution, so two rows are comparable only under the same policy. Pin it
   for every compared run; the script copies these keys into each ledger row.
+- The script adds a **run id** (`agent.meta.runId`, also in `run/checkup.json` and
+  the ledger row; `--run-id` to choose it). Stamp the harness and server logs with
+  the same id (`AIRBENCH_RUN_ID`), so a score drop leads straight to that run's logs.
 - `setup` fields are ≤100 chars each; an invalid body is `422` and creates nothing.
 - **The clock starts on this call** (one hour for the quick test). Start only when
   the server is warm and the harness is ready.
@@ -147,7 +150,7 @@ results are not given, by design, so the score cannot be used to probe answers.
 The script appends one line to `ledger.jsonl` in the current directory:
 
 ```json
-{"kind":"airbench_quick","checkupId":"…","agent":"…","config":"configs/cand-07.json","decoding":{"temperature":0.6,"top_p":0.95,"seed":1234},"passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…"}
+{"kind":"airbench_quick","runId":"20261119T101500Z-3f2a","checkupId":"…","agent":"…","config":"configs/cand-07.json","decoding":{"temperature":0.6,"top_p":0.95,"seed":1234},"passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…"}
 ```
 
 ## 4. Use it as a gate, not as the hill-climb metric
