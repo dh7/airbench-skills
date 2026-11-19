@@ -18,6 +18,9 @@ import time
 import urllib.error
 import urllib.request
 
+# agent.meta keys that make up the decoding policy, copied into every ledger row.
+DECODING_KEYS = ("temperature", "top_p", "top_k", "min_p", "seed")
+
 BASE = os.environ.get("AIRBENCH_URL", "https://airbench.ai").rstrip("/")
 KEY_FILE = os.path.expanduser(os.environ.get("AIRBENCH_KEY_FILE", "~/.config/airbench/test-key"))
 UA = "airbench-skill-local-inference-optimisation/1"
@@ -108,10 +111,13 @@ def cmd_start(a):
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "instructions.md"), "w") as f:
         f.write(r["instructions"])
+    agent_meta = (body.get("agent") or {}).get("meta") or {}
     meta = {
         "checkupId": r["checkupId"],
         "agent": (body.get("agent") or {}).get("name"),
-        "config": ((body.get("agent") or {}).get("meta") or {}).get("config"),
+        "config": agent_meta.get("config"),
+        # The decoding policy, so two ledger rows can be compared later.
+        "decoding": {k: agent_meta[k] for k in DECODING_KEYS if k in agent_meta},
         "startedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     with open(os.path.join(a.out, "checkup.json"), "w") as f:
@@ -132,7 +138,7 @@ def cmd_score(a):
         break
     if s != 200:
         die(s, r)
-    line = {"kind": "airbench_quick", **{k: meta.get(k) for k in ("checkupId", "agent", "config")}, **r}
+    line = {"kind": "airbench_quick", **{k: meta.get(k) for k in ("checkupId", "agent", "config", "decoding")}, **r}
     with open(a.ledger, "a") as f:
         f.write(json.dumps(line) + "\n")
     print(f"passed {r['passed']}/{r['total']} in {r['wallTimeMs'] / 1000:.0f}s  (logged to {a.ledger})")

@@ -71,7 +71,8 @@ and a body like:
   "agent": { "name": "qwen3.8-27b-exl3-3bpw-mtp",
              "meta": { "model": "Qwen3.8-27B", "quant": "EXL3 3bpw", "engine": "TabbyAPI 0.9.1",
                        "spec": "MTP depth 2", "config": "configs/cand-07.json", "config_sha": "1f3a9c2",
-                       "harness": "opencode", "harness_version": "1.3.13" } },
+                       "harness": "opencode", "harness_version": "1.3.13",
+                       "temperature": 0.6, "top_p": 0.95, "seed": 1234 } },
   "setup": { "runsLocally": true, "openWeights": true, "hardware": "RTX 3090",
              "inferenceEngine": "TabbyAPI", "model": "Qwen3.8-27B EXL3 3bpw",
              "harness": "opencode", "vramGb": 24 },
@@ -80,6 +81,10 @@ and a body like:
 
 - `agent.meta`: flat map, string/number/boolean values, ≤16 keys, ≤2KB. Put the
   config identity in it (file name + hash), so every score is tied to one config.
+- Put the **decoding policy** in it too: `temperature`, `top_p` (and `top_k`,
+  `min_p`, `seed` where the engine honours them). A quant change moves a
+  distribution, so two rows are comparable only under the same policy. Pin it
+  for every compared run; the script copies these keys into each ledger row.
 - `setup` fields are ≤100 chars each; an invalid body is `422` and creates nothing.
 - **The clock starts on this call** (one hour for the quick test). Start only when
   the server is warm and the harness is ready.
@@ -142,7 +147,7 @@ results are not given, by design, so the score cannot be used to probe answers.
 The script appends one line to `ledger.jsonl` in the current directory:
 
 ```json
-{"kind":"airbench_quick","checkupId":"…","agent":"…","config":"configs/cand-07.json","passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…"}
+{"kind":"airbench_quick","checkupId":"…","agent":"…","config":"configs/cand-07.json","decoding":{"temperature":0.6,"top_p":0.95,"seed":1234},"passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…"}
 ```
 
 ## 4. Use it as a gate, not as the hill-climb metric
