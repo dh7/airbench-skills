@@ -148,6 +148,10 @@ def cmd_score(a):
     with open(a.ledger, "a") as f:
         f.write(json.dumps(line) + "\n")
     print(f"passed {r['passed']}/{r['total']} in {r['wallTimeMs'] / 1000:.0f}s  (logged to {a.ledger})")
+    missed = [f"{c['key']} ({c['status']}{', late' if c.get('late') else ''})"
+              for c in r.get("challenges", []) if c.get("status") != "pass" or c.get("late")]
+    if missed:
+        print("not passed: " + ", ".join(missed))
 
 
 def main():

@@ -140,17 +140,27 @@ harness, and rerun. Common causes, seen in practice:
 → `GET https://airbench.ai/api/checkups/{checkupId}/score` with the same key:
 
 ```json
-{ "passed": 12, "total": 15, "wallTimeMs": 734120, "finishedAt": "…" }
+{ "passed": 12, "total": 15, "wallTimeMs": 734120, "finishedAt": "…",
+  "challenges": [
+    { "benchmark": "airbench-text-v1", "key": "arithmetic-1", "status": "pass", "late": false, "elapsedMs": 41210 },
+    { "benchmark": "airbench-code-v1", "key": "fix-1", "status": "fail", "late": false, "elapsedMs": 402877 },
+    … ] }
 ```
 
 Before the test is over it answers `409 { "error": "not_finished" }` (it ends when
-every challenge is answered or the hour runs out). Totals only — per-challenge
-results are not given, by design, so the score cannot be used to probe answers.
+every challenge is answered or the hour runs out). `challenges` has one line per
+challenge: `pass`, `fail`, `unable`, `error` or `unanswered`, plus `late` (answered
+after the hour, never counted) and `elapsedMs` (time since the run started, not
+time spent on that challenge). Never the expected answers, and each run draws
+fresh instances, so it says *what* broke without letting you tune on the answers.
+Compare the failed keys across runs: a key that fails in every candidate run and
+in no control run points at what the change broke. One run's failed set alone is
+mostly noise.
 
 The script appends one line to `ledger.jsonl` in the current directory:
 
 ```json
-{"kind":"airbench_quick","runId":"20261119T101500Z-3f2a","checkupId":"…","agent":"…","config":"configs/cand-07.json","decoding":{"temperature":0.6,"top_p":0.95,"seed":1234},"passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…"}
+{"kind":"airbench_quick","runId":"20261119T101500Z-3f2a","checkupId":"…","agent":"…","config":"configs/cand-07.json","decoding":{"temperature":0.6,"top_p":0.95,"seed":1234},"passed":12,"total":15,"wallTimeMs":734120,"finishedAt":"…","challenges":[…]}
 ```
 
 ## 4. Use it as a gate, not as the hill-climb metric
